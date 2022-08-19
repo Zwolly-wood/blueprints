@@ -1,0 +1,151 @@
+blueprint:
+  name: Z2M - CALEX - Smart remote
+  description: This automation simulates the use of the Calex Dimmer Switch Colour
+    Control
+  domain: automation
+  input:
+    mode:
+      name: Automation Mode
+      description: https://www.home-assistant.io/docs/automation/modes/
+      default: restart
+      selector:
+        select:
+          mode: dropdown
+          options:
+          - single
+          - restart
+          - queued
+          - parallel
+          multiple: false
+          custom_value: false
+    max:
+      name: Automation Max Queue
+      description: The maximum number of runs that can be executing and/or queued
+        up at a time.
+      default: 10
+      selector:
+        number:
+          mode: box
+          min: 1.0
+          max: 100.0
+          step: 1.0
+    remote:
+      name: Calex remote control
+      description: Select the remote control you wish to use.
+      selector:
+        entity:
+          domain: sensor
+          integration: mqtt
+          multiple: false
+    light:
+      name: Light
+      selector:
+        target:
+          entity:
+            domain: light
+  source_url: https://github.com/Zwolly-wood/blueprints/automation/calex-smart-wall-switch.yaml
+mode: !input mode
+max: !input max
+max_exceeded: silent
+trigger:
+- platform: state
+  entity_id: !input remote
+  attribute: action
+  not_to: ''
+action:
+- variables:
+    command: '{{ trigger.to_state.attributes.action }}'
+#    cluster_id: '{{ trigger.event.data.cluster_id }}'
+#    endpoint_id: '{{ trigger.event.data.endpoint_id }}'
+    transition_time: '{% if trigger.to_state.state.action_transition_time is defined %}{{
+      trigger.to_state.state.action_transition_time }}{%else%}0{% endif %}'
+    step_mode: '{% if trigger.to_state.attributes.action_step_mode is defined %}{{ trigger.to_state.attributes.action_step_mode|int
+      }}{% endif %}'
+    step_size: '{% if trigger.to_state.attributes.action_step_size is defined %}{{ trigger.to_state.attributes.action_step_size|int
+      }}{% endif %}'
+    move_mode: '{% if trigger.to_state.attributes.action_move_mode is defined %}{{ trigger.attributes.state.action_move_mode|int
+      }}{% endif %}'
+    move_size: '{% if trigger.to_state.attributes.action_move_size is defined %}{{ trigger.to_state.attributes.action_move_size|int
+      }}{% endif %}'
+    rate: '{% if trigger.to_state.attributes.action_rate is defined %}{{ trigger.to_state.attributes.action_rate
+      }}{% endif %}'
+    color_temp_move: '{% if trigger.to_state.attributes.action_color_temperature is defined
+      %}{{ trigger.to_state.attributes.action_color_temperature }}{% endif %}'
+    enhanced_hue: '{% if trigger.to_state.attributes.action_enhanced_hue is defined %}{{ trigger.to_state.attributes.action_enhanced_hue
+      }}{% endif %}'
+    saturation: '{% if trigger.to_state.attributes.action_saturation is defined %}{{ trigger.to_state.attributes.action_saturation
+      }}{% endif %}'
+- choose:
+  - conditions:
+    - '{{ command == ''on'' }}'
+    sequence:
+    - service: light.turn_on
+      target: !input light
+  - conditions:
+    - '{{ command == ''off'' }}'
+    sequence:
+    - service: light.turn_off
+      target: !input light
+  - conditions:
+    - '{{ command == ''brightness_step_up'' }}'
+#    - '{{ step_mode == 0 }}'
+    sequence:
+    - service: light.turn_on
+      target: !input light
+      data:
+        transition: '{{ transition_time / 10 }}'
+        brightness_step_pct: 10
+  - conditions:
+    - '{{ command == ''brightness_step_down'' }}'
+#    - '{{ step_mode== 1 }}'
+    sequence:
+    - service: light.turn_on
+      target: !input light
+      data:
+        transition: '{{ transition_time / 10 }}'
+        brightness_step_pct: -10
+  - conditions:
+    - '{{ command == ''brightness_move_up'' }}'
+    - '{{ move_mode == 0 }}'
+    sequence:
+    - repeat:
+        count: 10
+        sequence:
+        - service: light.turn_on
+          target: !input light
+          data:
+            transition: '{{ transition_time / 10 }}'
+            brightness_step_pct: 10
+        - delay: 0.5
+  - conditions:
+    - '{{ command == ''brightness_move_down'' }}'
+    - '{{ move_mode == 1 }}'
+    sequence:
+    - repeat:
+        count: 10
+        sequence:
+        - service: light.turn_on
+          target: !input light
+          data:
+            transition: '{{ transition_time / 10 }}'
+            brightness_step_pct: -10
+        - delay: 0.5
+  - conditions:
+    - '{{ command == ''color_temperature_move'' }}'
+    sequence:
+    - service: light.turn_on
+      target: !input light
+      data:
+        transition: '{{ transition_time / 10 }}'
+        color_temp: '{{ color_temp_move }}'
+  - conditions:
+    - '{{ command == ''enhanced_move_to_hue_and_saturation'' }}'
+    sequence:
+    - service: light.turn_on
+      target: !input light
+      data:
+        transition: '{{ transition_time / 10 }}'
+        hs_color:
+        - '{{ ( enhanced_hue|float / 65535 ) * 360 }}'
+        - '{{ ( saturation|float / 254 ) * 100 }}'
+  default: []
